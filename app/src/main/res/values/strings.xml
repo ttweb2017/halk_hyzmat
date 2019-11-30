@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">HalkHyzmat</string>
+    <string name="app_title">Halk Hyzmatlary</string>
+    <string name="app_description">Bu ýerde siz öz login we açarsözüňizi ýazyp şahsy otagyňyza girip we jaý-jemagat hyzmatlaryny töläp bilersiňiz.</string>
+    <string name="app_login_text">LOGIN</string>
+    <string name="app_password_text">AÇARSÖZ</string>
+    <string name="app_login_btn_txt">Girmek</string>
+    <string name="app_dashboard_payment">Tölemek</string>
+    <string name="app_dashboard_payment_desc">Tölegleri bu ýerde töläp bilersiňiz</string>
+    <string name="app_dashboard_profile">Profilim</string>
+    <string name="app_dashboard_profile_desc">Öz profiliňizi bärden görüň</string>
+    <string name="title_activity_web_view">WebViewActivity</string>
+    <string name="payment_title">Töleg Gaz</string>
+    <string name="payment_meter">000000001</string>
+    <string name="payment_sum">0.00 TMT</string>
+    <string name="payment_total_title">Töleg Jemi</string>
+    <string name="user_account_no">Hususy hasap No</string>
+    <string name="user_street">Köçesi</string>
+    <string name="user_house">Jaý No</string>
+    <string name="user_flat">Öý No</string>
+</resources>
