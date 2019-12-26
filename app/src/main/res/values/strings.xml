@@ -12,10 +12,23 @@
     <string name="title_activity_web_view">WebViewActivity</string>
     <string name="payment_title">Töleg Gaz</string>
     <string name="payment_meter">000000001</string>
-    <string name="payment_sum">0.00 TMT</string>
+    <string name="payment_prepay">AWANS</string>
+    <string name="payment_sum">0.0 TMT</string>
+    <string name="payment_pay">Tölemek</string>
     <string name="payment_total_title">Töleg Jemi</string>
     <string name="user_account_no">Hususy hasap No</string>
     <string name="user_street">Köçesi</string>
     <string name="user_house">Jaý No</string>
     <string name="user_flat">Öý No</string>
+
+    <string name="payment_success">Tölegiňiz başaryly geçdi. Sag boluň!</string>
+    <string name="payment_failed">Tölegiňiz başarysyz. Täzeden barlaň!</string>
+
+    <string name="login_data_required">Login ýa-da açarsözüňizi ýazyň!</string>
+    <string name="login_data_incorrect">Login ýa-da açarsözüňizi ýazyň!</string>
+
+    <string name="payment_request_zero">Tölemek üçin töleg jemi 0.0 TMT dan köp bolmaly!</string>
+    <string name="payment_empty">Häzirlikçe töleg ýok!</string>
+
+    <string name="connection_failed">Ýalňyşlyk: Serwere baglanyp bolmady!</string>
 </resources>

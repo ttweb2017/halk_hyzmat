@@ -3,9 +3,9 @@ package org.ttweb.halkhyzmat;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -42,6 +42,10 @@ public class WebViewActivity extends AppCompatActivity {
 
     private WebView webView;
     private Order order;
+
+    Call<Order> paymentCall;
+    Call<BankResponse> bankCall;
+    Call<PaymentStatus> checkCall;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,16 +98,38 @@ public class WebViewActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onStop() {
+        super.onStop();
+
+        if(paymentCall != null && paymentCall.isExecuted()){
+            //isAlert = false;
+            paymentCall.cancel();
+        }
+
+        if(bankCall != null && bankCall.isExecuted()){
+            //isAlert = false;
+            bankCall.cancel();
+        }
+
+        if(checkCall != null && checkCall.isExecuted()){
+            //isAlert = false;
+            checkCall.cancel();
+        }
+    }
+
 
     private void getOrder(int paymentId){
-        Call<Order> paymentCall = paymentClient.getPaymentData(cookie, paymentId);
+        paymentCall = paymentClient.getPaymentData(cookie, paymentId);
 
         paymentCall.enqueue(new Callback<Order>() {
             @Override
             public void onResponse(@NonNull Call<Order> call, @NonNull Response<Order> response) {
-                if (response.isSuccessful()) {
+                if (response.isSuccessful() && response.body() != null) {
                     Log.i("ORDER", "Payment ID: " + response.body().getPaymentId());
                     registerOrder(response.body());
+                }else {
+                    Log.e("ORDER", "Failed Payment ID:::::: " + response.message());
                 }
             }
 
@@ -137,7 +163,6 @@ public class WebViewActivity extends AppCompatActivity {
         try {
             failUrl = URLEncoder.encode(failUrl, "UTF-8");
             returnUrl = URLEncoder.encode(returnUrl,"UTF-8");
-            Log.e("URL ENCODE", returnUrl);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
@@ -150,7 +175,7 @@ public class WebViewActivity extends AppCompatActivity {
 
         BankClient bankClient = retrofit.create(BankClient.class);
 
-        Call<BankResponse> bankCall = bankClient.registerOrder(
+        bankCall = bankClient.registerOrder(
                 order.getMerchantCurrency(),
                 order.getMerchantLanguage(),
                 order.getMerchantPageView(),
@@ -167,10 +192,9 @@ public class WebViewActivity extends AppCompatActivity {
         bankCall.enqueue(new Callback<BankResponse>() {
             @Override
             public void onResponse(@NonNull Call<BankResponse> call, @NonNull Response<BankResponse> response) {
-                if (response.isSuccessful()) {
-                    Log.i("BANK ORDER", "Url: " + response.body().getFormUrl());
-
+                if (response.isSuccessful() && response.body() != null) {
                     if (response.body().getErrorCode() == 0) {
+                        Log.i("BANK ORDER", "Url: " + response.body().getFormUrl());
                         openWebview(response.body().getFormUrl());
                     }else{
                         Log.d("BANK ORDER", "Error Message: " + response.body().getErrorMessage());
@@ -189,6 +213,7 @@ public class WebViewActivity extends AppCompatActivity {
         webView = findViewById(R.id.webView);
         WebSettings webSettings = webView.getSettings();
         webSettings.setLoadsImagesAutomatically(true);
+        webSettings.setJavaScriptEnabled(true);
         webView.loadUrl(url);
         webView.setWebViewClient(new MyBrowser(this, order, cookie));
     }
@@ -198,16 +223,26 @@ public class WebViewActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
+    private void goToDashboard(boolean status){
+        Intent intent = new Intent(this, DashboardActivity.class);
+        String message;
+        if(status){
+            message = getResources().getString(R.string.payment_success);
+        }else{
+            message = getResources().getString(R.string.payment_failed);
+        }
+
+        intent.putExtra("status", true);
+        intent.putExtra("payment_message", message);
+        startActivity(intent);
+    }
+
     private void isPayed(String returnUrl){
         if (returnUrl.contains("sign")) {
             Map<String, String> params;
 
-            Log.e("PAYMENT PARAM", returnUrl);
-
             try {
                 params = getQueryParams(returnUrl);
-
-                Log.e("PAYMENT PARAM", "params: " + params.get("sign"));
 
                 Retrofit.Builder bBuilder = new Retrofit.Builder()
                         .baseUrl(MainActivity.BASE_URL)
@@ -217,7 +252,7 @@ public class WebViewActivity extends AppCompatActivity {
 
                 PaymentClient bankClient = retrofit.create(PaymentClient.class);
 
-                Call<PaymentStatus> checkCall = bankClient.isPayed(
+                checkCall = bankClient.isPayed(
                         cookie,
                         params.get("origOrderId"),
                         params.get("sign"),
@@ -229,17 +264,18 @@ public class WebViewActivity extends AppCompatActivity {
                 checkCall.enqueue(new Callback<PaymentStatus>() {
                     @Override
                     public void onResponse(@NonNull Call<PaymentStatus> call, @NonNull Response<PaymentStatus> response) {
-                        if (response.isSuccessful()) {
-                            if(response.body().getStatus()){
-                                Log.i("PAYMENT STATUS", "Status: " + response.body().getStatus());
-                                goToPayment();
-                            }
+                        if (response.isSuccessful() && response.body() != null) {
+                            Log.i("PAYMENT STATUS", "Status: " + response.body().getStatus());
+                            goToDashboard(response.body().getStatus());
+                        }else{
+                            goToDashboard(false);
                         }
                     }
 
                     @Override
                     public void onFailure(@NonNull Call<PaymentStatus> call, @NonNull Throwable t) {
                         Log.e("PAYMENT STATUS", "Failed: " + t.getMessage());
+                        goToDashboard(false);
                     }
                 });
 
@@ -252,12 +288,17 @@ public class WebViewActivity extends AppCompatActivity {
     public Map<String, String> getQueryParams(String url) throws UnsupportedEncodingException {
         Map<String, String> params = new HashMap<>();
         String urlDecoded = URLDecoder.decode(url, "UTF-8");
+
         String[] urlParts = urlDecoded.split("\\?");
         if (urlParts.length < 2) {
             return params;
         }
 
         String query = urlParts[1];
+        if(urlParts.length == 3){
+            query += "&" + urlParts[2];
+        }
+
         for (String param : query.split("&")) {
             String[] pair = param.split("=");
             String key = URLDecoder.decode(pair[0], "UTF-8");
@@ -297,7 +338,7 @@ public class WebViewActivity extends AppCompatActivity {
             }else{
                 Log.i("URL ORDER_ID", url);
                 isPayed(url);
-                view.loadUrl(MainActivity.BASE_URL);
+                //view.loadUrl(MainActivity.BASE_URL);
             }
 
             return true;

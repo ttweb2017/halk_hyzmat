@@ -3,6 +3,7 @@ package org.ttweb.halkhyzmat;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.support.design.widget.CollapsingToolbarLayout;
+import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.CardView;
@@ -10,6 +11,7 @@ import android.support.v7.widget.Toolbar;
 import android.view.View;
 
 public class DashboardActivity extends AppCompatActivity {
+    private View view;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,6 +35,20 @@ public class DashboardActivity extends AppCompatActivity {
 
         Toolbar mToolbar = findViewById(R.id.toolbarId);
         mToolbar.setNavigationIcon(R.drawable.ic_arrow_white_black_24dp);
+
+        view = findViewById(R.id.dashboardView);
+
+        Intent i = getIntent();
+
+        if(i.getExtras() != null){
+
+            boolean status = i.getExtras().getBoolean("status");
+            if(status){
+                String message = i.getExtras().getString("payment_message", "");
+                Snackbar.make(view, message, Snackbar.LENGTH_LONG).show();
+            }
+        }
+
 
         mToolbar.setNavigationOnClickListener(new View.OnClickListener() {
             @Override

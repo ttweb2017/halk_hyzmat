@@ -2,20 +2,20 @@ package org.ttweb.halkhyzmat;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.design.widget.CollapsingToolbarLayout;
+import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
-import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
 
 import org.ttweb.halkhyzmat.adapter.RecyclerViewAdapter;
+import org.ttweb.halkhyzmat.model.Charge;
 import org.ttweb.halkhyzmat.model.Order;
 import org.ttweb.halkhyzmat.model.Payment;
 import org.ttweb.halkhyzmat.service.PaymentClient;
@@ -35,17 +35,21 @@ public class PaymentActivity extends AppCompatActivity {
     private String cookie;
 
     private RecyclerView myRv ;
-    private RecyclerViewAdapter rvAdapter;
 
     private ProgressBar progressBar;
+    private EditText paymentPrepayAmount;
 
-    private TextView paymentTotal;
     private String sessid;
+
+    private Payment payment;
 
     //Retrofit
     private PaymentClient paymentClient;
 
-    private Payment payment;
+    private Call<Payment> paymentCall;
+    private Call<Order> createPaymentCall;
+
+    private View paymentView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,11 +71,13 @@ public class PaymentActivity extends AppCompatActivity {
 
         paymentClient = retrofit.create(PaymentClient.class);
 
+        paymentView = findViewById(R.id.paymentActivityView);
+
         myRv = findViewById(R.id.rv);
 
         progressBar = findViewById(R.id.paymentProgressBar);
 
-        paymentTotal = findViewById(R.id.paymentTotal);
+        paymentPrepayAmount = findViewById(R.id.paymentPrepayAmount);
 
         SharedPreferences sharedPref = getSharedPreferences(MainActivity.USER_DATA, MODE_PRIVATE);
         String sessionId = sharedPref.getString("SESSION_ID", "");
@@ -107,22 +113,91 @@ public class PaymentActivity extends AppCompatActivity {
         getPaymentsList();
     }
 
+    @Override
+    public void onStop() {
+        super.onStop();
+
+        if(paymentCall != null && paymentCall.isExecuted()){
+            paymentCall.cancel();
+        }
+
+        if(createPaymentCall != null && createPaymentCall.isExecuted()){
+            createPaymentCall.cancel();
+        }
+
+        progressBar.setVisibility(ProgressBar.GONE);
+    }
+
+    //method to get list of payments
+    private void getPaymentsList(){
+        progressBar.setVisibility(ProgressBar.VISIBLE);
+        paymentCall = paymentClient.getPayments(cookie);
+
+        paymentCall.enqueue(new Callback<Payment>() {
+            @Override
+            public void onResponse(@NonNull Call<Payment> call, @NonNull Response<Payment> response) {
+                progressBar.setVisibility(ProgressBar.GONE);
+                if (response.isSuccessful() && response.body() != null) {
+                    setRvadapter(response.body());
+                }else {
+                    Snackbar.make(paymentView, R.string.payment_empty, Snackbar.LENGTH_LONG).show();
+                }
+            }
+
+            @Override
+            public void onFailure(@NonNull Call<Payment> call, @NonNull Throwable t) {
+                progressBar.setVisibility(ProgressBar.GONE);
+                Snackbar.make(paymentView, R.string.connection_failed, Snackbar.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    public void setRvadapter (Payment payment) {
+        this.payment = payment;
+
+        final String paymentSystemId;
+        if(payment.getPaymentSystem() != null) {
+            paymentSystemId = payment.getPaymentSystem().get("ID");
+        } else{
+            paymentSystemId = "0";
+        }
+
+
+        RecyclerViewAdapter rvAdapter = new RecyclerViewAdapter(this, payment, new RecyclerViewAdapter.OnItemClickListener() {
+            @Override
+            public void onItemClick(Charge charge) {
+                if(charge.getDebt() > 0.0){
+                    Map<String, String> postData = new HashMap<>();
+
+                    postData.put("pay_system_id", paymentSystemId);
+                    postData.put("meters_id", charge.getMeterId());
+                    postData.put("pay_amount", String.valueOf(charge.getDebt()));
+                    postData.put("sessid", sessid);
+
+                    createPayment(cookie, postData);
+                }else{
+                    Snackbar.make(paymentView, R.string.payment_request_zero, Snackbar.LENGTH_LONG).show();
+                }
+            }
+        });
+
+        myRv.setLayoutManager(new LinearLayoutManager(this));
+        myRv.setAdapter(rvAdapter);
+    }
+
     public void payTotal(View view){
-        if(Float.valueOf(paymentTotal.getText().toString().substring(0, paymentTotal.getText().toString().indexOf(" "))) > 0.00){
+        if(!paymentPrepayAmount.getText().toString().isEmpty() && Float.valueOf(paymentPrepayAmount.getText().toString()) > 0.0){
             Map<String, String> postData = new HashMap<>();
 
             postData.put("pay_system_id", String.valueOf(payment.getPaymentSystem().get("ID")));
             postData.put("meters_id", "");
-            postData.put("pay_amount", String.valueOf(payment.getAmount()));
+            postData.put("pay_amount", paymentPrepayAmount.getText().toString());
             postData.put("sessid", sessid);
-
-            Log.i("TOTAL PAYMENT", "total amount: " + payment.getAmount());
-            Log.i("TOTAL PAYMENT", "sessid: " + sessid);
 
             createPayment(cookie, postData);
 
         }else{
-            Toast.makeText(PaymentActivity.this,"Tölemek üçin töleg jemi ýetersiz!", Toast.LENGTH_SHORT).show();
+            Snackbar.make(view, R.string.payment_request_zero, Snackbar.LENGTH_LONG).show();
         }
     }
 
@@ -130,7 +205,7 @@ public class PaymentActivity extends AppCompatActivity {
     private void createPayment(String cookie, Map<String, String> postData){
         progressBar.setVisibility(ProgressBar.VISIBLE);
 
-        final Call<Order> createPaymentCall = paymentClient.createPayment(
+        createPaymentCall = paymentClient.createPayment(
                 cookie,
                 postData.get("pay_system_id"),
                 postData.get("meters_id"),
@@ -140,23 +215,20 @@ public class PaymentActivity extends AppCompatActivity {
         createPaymentCall.enqueue(new Callback<Order>() {
             @Override
             public void onResponse(@NonNull Call<Order> call, @NonNull Response<Order> response) {
-                if (response.isSuccessful()) {
-                    Log.i("WEBVIEW", "pmt ID: " + response.body().getPaymentId());
-                    progressBar.setVisibility(ProgressBar.INVISIBLE);
-
+                progressBar.setVisibility(ProgressBar.GONE);
+                if (response.isSuccessful() && response.body() != null) {
                     //Start new Activity here
                     goToWebView(response.body().getPaymentId());
 
                 }else{
-                    progressBar.setVisibility(ProgressBar.INVISIBLE);
+                    Snackbar.make(paymentView, response.message(), Snackbar.LENGTH_LONG).show();
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<Order> call, @NonNull Throwable t) {
-                Log.e("CreatePayment", "fail: " + t.getMessage());
-                progressBar.setVisibility(ProgressBar.INVISIBLE);
-                Toast.makeText(PaymentActivity.this,"Ýalňyşlyk: Serwere baglanyp bolmady!", Toast.LENGTH_SHORT).show();
+                progressBar.setVisibility(ProgressBar.GONE);
+                Snackbar.make(paymentView, R.string.connection_failed, Snackbar.LENGTH_LONG).show();
             }
         });
     }
@@ -165,37 +237,5 @@ public class PaymentActivity extends AppCompatActivity {
         Intent i = new Intent(this, WebViewActivity.class);
         i.putExtra("payment", paymentId);
         startActivity(i);
-    }
-
-    //method to get list of payments
-    private void getPaymentsList(){
-        Call<Payment> call = paymentClient.getPayments(cookie);
-
-        call.enqueue(new Callback<Payment>() {
-            @Override
-            public void onResponse(@NonNull Call<Payment> call, @NonNull Response<Payment> response) {
-                if (response.isSuccessful()) {
-                    setRvadapter(response.body());
-                    Toast.makeText(PaymentActivity.this,"Jaý-jemagat tölegleri", Toast.LENGTH_SHORT).show();
-                }
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<Payment> call, @NonNull Throwable t) {
-                Log.e("PAYMENT", t.getMessage());
-                Toast.makeText(PaymentActivity.this,"Ýalňyşlyk: Serwere baglanyp bolmady!", Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-
-    public void setRvadapter (Payment payment) {
-        rvAdapter = new RecyclerViewAdapter(this, payment);
-        myRv.setLayoutManager(new LinearLayoutManager(this));
-        myRv.setAdapter(rvAdapter);
-
-        this.payment = payment;
-
-        String total = payment.getAmount() + " TMT";
-        paymentTotal.setText(total);
     }
 }
